@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -10,6 +11,7 @@ struct Cli {
     path: PathBuf,
 }
 
+#[derive(Debug)]
 struct FileInfo {
     path: PathBuf,
     len: u64,
@@ -39,9 +41,17 @@ fn list_files(path: PathBuf) -> io::Result<Vec<FileInfo>> {
     Ok(files)
 }
 
-fn print_all(files: Vec<FileInfo>) {
+fn find_exact_same_size(files: Vec<FileInfo>) {
+    let mut join_by_size: HashMap<u64, Vec<FileInfo>> = HashMap::new();
     for f in files {
-        println!("{} {}", f.len, f.path.display())
+        join_by_size.entry(f.len).or_default().push(f);
+    }
+
+    println!("The next files are potentially the same:");
+    for (len, files) in join_by_size {
+        if files.len() > 1 {
+            println!("{len}: {files:?}")
+        }
     }
 }
 
@@ -50,7 +60,7 @@ fn main() {
     let paths = list_files(args.path);
 
     match paths {
-        Ok(paths) => print_all(paths),
+        Ok(paths) => find_exact_same_size(paths),
         Err(err) => println!("Error examining the folder: {err}"),
     }
 }
