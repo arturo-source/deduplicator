@@ -1,6 +1,7 @@
 use clap::Parser;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::PathBuf;
 
 /// Find all files duplicated inside of a path.
 #[derive(Parser)]
@@ -9,32 +10,44 @@ struct Cli {
     path: PathBuf,
 }
 
-fn list_files(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+struct FileInfo {
+    path: PathBuf,
+    len: u64,
+}
+
+impl FileInfo {
+    fn try_new(path: PathBuf) -> io::Result<FileInfo> {
+        let len = path.metadata()?.len();
+        Ok(FileInfo { path, len })
+    }
+}
+
+fn list_files(path: PathBuf) -> io::Result<Vec<FileInfo>> {
     if path.is_file() {
-        return Ok(vec![path.to_path_buf()]);
+        let fi = FileInfo::try_new(path)?;
+        return Ok(vec![fi]);
     }
 
     let mut files = Vec::new();
     let entries = fs::read_dir(path)?;
     for entry in entries {
         let entry_path = entry?.path();
-        let nested_files = list_files(&entry_path)?;
+        let nested_files = list_files(entry_path)?;
         files.extend(nested_files);
     }
 
     Ok(files)
 }
 
-fn print_all(paths: Vec<PathBuf>) {
-    for path in paths {
-        let len = path.metadata().unwrap().len();
-        println!("{} {}", len, path.display())
+fn print_all(files: Vec<FileInfo>) {
+    for f in files {
+        println!("{} {}", f.len, f.path.display())
     }
 }
 
 fn main() {
     let args = Cli::parse();
-    let paths = list_files(&args.path);
+    let paths = list_files(args.path);
 
     match paths {
         Ok(paths) => print_all(paths),
