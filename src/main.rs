@@ -1,7 +1,8 @@
 use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
-use std::io;
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::PathBuf;
 
 /// Find all files duplicated inside of a path.
@@ -11,23 +12,9 @@ struct Cli {
     path: PathBuf,
 }
 
-#[derive(Debug)]
-struct FileInfo {
-    path: PathBuf,
-    len: u64,
-}
-
-impl FileInfo {
-    fn try_new(path: PathBuf) -> io::Result<FileInfo> {
-        let len = path.metadata()?.len();
-        Ok(FileInfo { path, len })
-    }
-}
-
-fn list_files(path: PathBuf) -> io::Result<Vec<FileInfo>> {
+fn list_files(path: PathBuf) -> io::Result<Vec<PathBuf>> {
     if path.is_file() {
-        let fi = FileInfo::try_new(path)?;
-        return Ok(vec![fi]);
+        return Ok(vec![path]);
     }
 
     let mut files = Vec::new();
@@ -41,26 +28,74 @@ fn list_files(path: PathBuf) -> io::Result<Vec<FileInfo>> {
     Ok(files)
 }
 
-fn find_exact_same_size(files: Vec<FileInfo>) {
-    let mut join_by_size: HashMap<u64, Vec<FileInfo>> = HashMap::new();
-    for f in files {
-        join_by_size.entry(f.len).or_default().push(f);
+fn get_duplicated_files_by_byte(paths: Vec<PathBuf>) -> Vec<Vec<PathBuf>> {
+    let mut buf = [0; 1024];
+    let mut files = Vec::new();
+    let mut duplicated_files = Vec::new();
+    let mut is_duplicated = vec![false; paths.len()];
+
+    for path in &paths {
+        let mut file = File::open(path).unwrap();
+        file.read(&mut buf).unwrap();
+        files.push(buf.clone());
     }
 
-    println!("The next files are potentially the same:");
-    for (len, files) in join_by_size {
-        if files.len() > 1 {
-            println!("{len}: {files:?}")
+    for (i, f1) in files.iter().enumerate() {
+        if is_duplicated[i] {
+            continue;
+        }
+
+        let mut equal_files = vec![paths[i].clone()];
+        for (j, f2) in files.iter().enumerate().skip(i + 1) {
+            if f1 == f2 {
+                is_duplicated[j] = true;
+                equal_files.push(paths[j].clone());
+            }
+        }
+
+        if equal_files.len() > 1 {
+            is_duplicated[i] = true;
+            duplicated_files.push(equal_files);
         }
     }
+
+    duplicated_files
+}
+
+fn get_duplicated_files(paths: Vec<PathBuf>) -> io::Result<Vec<Vec<PathBuf>>> {
+    let mut map_by_len: HashMap<u64, Vec<PathBuf>> = HashMap::new();
+    for path in paths {
+        let len = path.metadata()?.len();
+        map_by_len.entry(len).or_default().push(path);
+    }
+
+    let mut duplicated_files: Vec<Vec<PathBuf>> = Vec::new();
+    for (_, paths) in map_by_len {
+        if paths.len() <= 1 {
+            continue;
+        }
+
+        duplicated_files.extend(get_duplicated_files_by_byte(paths));
+    }
+
+    Ok(duplicated_files)
 }
 
 fn main() {
     let args = Cli::parse();
     let paths = list_files(args.path);
 
-    match paths {
-        Ok(paths) => find_exact_same_size(paths),
-        Err(err) => println!("Error examining the folder: {err}"),
+    let duplicated_files = match paths {
+        Ok(paths) => get_duplicated_files(paths),
+        Err(err) => panic!("Error examining the folder: {err}"),
+    };
+
+    match duplicated_files {
+        Ok(duplicated_files) => {
+            for same_files in duplicated_files {
+                println!("These are the same files: {same_files:?}")
+            }
+        }
+        Err(err) => panic!("Error examining the files: {err}"),
     }
 }
