@@ -81,6 +81,41 @@ fn get_duplicated_files(paths: Vec<PathBuf>) -> io::Result<Vec<Vec<PathBuf>>> {
     Ok(duplicated_files)
 }
 
+fn order_paths<'a>(p1: &'a PathBuf, p2: &'a PathBuf) -> (&'a PathBuf, &'a PathBuf) {
+    if p1 < p2 { (p1, p2) } else { (p2, p1) }
+}
+
+fn get_shared_parents(
+    duplicated_files: Vec<Vec<PathBuf>>,
+) -> HashMap<(PathBuf, PathBuf), (Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut folders = HashMap::new();
+    let mut duplicated_files_parents = Vec::with_capacity(duplicated_files.len());
+
+    for same_files in &duplicated_files {
+        let mut same_parents = Vec::with_capacity(same_files.len());
+        for f in same_files {
+            same_parents.push(f.parent().unwrap().to_path_buf());
+        }
+        duplicated_files_parents.push(same_parents);
+    }
+
+    for (i, same_parents) in duplicated_files_parents.iter().enumerate() {
+        for (j, sp1) in same_parents.iter().enumerate() {
+            for (k, sp2) in same_parents.iter().enumerate().skip(j + 1) {
+                let (sp1, sp2) = order_paths(sp1, sp2);
+
+                let (files1, files2) = folders
+                    .entry((sp1.to_path_buf(), sp2.to_path_buf()))
+                    .or_insert((Vec::new(), Vec::new()));
+                files1.push(duplicated_files[i][j].clone());
+                files2.push(duplicated_files[i][k].clone());
+            }
+        }
+    }
+
+    folders
+}
+
 fn main() {
     let args = Cli::parse();
     let paths = list_files(args.path);
@@ -90,12 +125,22 @@ fn main() {
         Err(err) => panic!("Error examining the folder: {err}"),
     };
 
-    match duplicated_files {
-        Ok(duplicated_files) => {
-            for same_files in duplicated_files {
-                println!("These are the same files: {same_files:?}")
-            }
-        }
+    let shared_parents = match duplicated_files {
+        Ok(duplicated_files) => get_shared_parents(duplicated_files),
         Err(err) => panic!("Error examining the files: {err}"),
+    };
+
+    for ((parent1, parent2), (files1, files2)) in shared_parents {
+        println!("In {parent1:?}:");
+        for f in files1 {
+            println!("  {:?}", f.file_name().unwrap())
+        }
+
+        println!("In {parent2:?}:");
+        for f in files2 {
+            println!("  {:?}", f.file_name().unwrap())
+        }
+
+        println!()
     }
 }
