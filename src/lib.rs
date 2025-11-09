@@ -72,7 +72,7 @@ pub fn get_duplicated_files(paths: Vec<PathBuf>) -> io::Result<Vec<Vec<PathBuf>>
     Ok(duplicated_files)
 }
 
-fn order_paths<'a>(p1: &'a PathBuf, p2: &'a PathBuf) -> (&'a PathBuf, &'a PathBuf) {
+fn sort_paths<'a>(p1: &'a PathBuf, p2: &'a PathBuf) -> (&'a PathBuf, &'a PathBuf) {
     if p1 < p2 { (p1, p2) } else { (p2, p1) }
 }
 
@@ -93,7 +93,7 @@ pub fn get_shared_parents(
     for (i, same_parents) in duplicated_files_parents.iter().enumerate() {
         for (j, sp1) in same_parents.iter().enumerate() {
             for (k, sp2) in same_parents.iter().enumerate().skip(j + 1) {
-                let (sp1, sp2) = order_paths(sp1, sp2);
+                let (sp1, sp2) = sort_paths(sp1, sp2);
 
                 let (files1, files2) = folders
                     .entry((sp1.to_path_buf(), sp2.to_path_buf()))

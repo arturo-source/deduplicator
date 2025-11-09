@@ -24,7 +24,10 @@ fn run(path: PathBuf) -> io::Result<()> {
     let duplicated_files = get_duplicated_files(paths)?;
     let shared_parents = get_shared_parents(duplicated_files);
 
-    for ((parent1, parent2), (files1, files2)) in shared_parents {
+    let mut shared_parents_vec: Vec<_> = shared_parents.into_iter().collect();
+    shared_parents_vec.sort_by(|a, b| b.1.0.len().cmp(&a.1.0.len()));
+
+    for ((parent1, parent2), (files1, files2)) in shared_parents_vec {
         println!("In {parent1:?}:");
         for f in files1 {
             println!("  {:?}", f.file_name().unwrap())
